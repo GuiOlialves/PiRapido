@@ -230,6 +230,65 @@ public class Conexao {
         for (String sql : alteracoesLegadas) {
             stmt.executeUpdate(sql);
         }
+
+        String[][] ajustesColunas = {
+            {"cliente", "emailCliente", "ALTER TABLE cliente MODIFY COLUMN emailCliente VARCHAR(150) NULL DEFAULT NULL"},
+            {"cliente", "telefoneCliente", "ALTER TABLE cliente MODIFY COLUMN telefoneCliente VARCHAR(20) NULL DEFAULT NULL"},
+            {"cliente", "cep", "ALTER TABLE cliente MODIFY COLUMN cep CHAR(8) NULL DEFAULT NULL"},
+            {"usuario", "telefoneUsuario", "ALTER TABLE usuario MODIFY COLUMN telefoneUsuario VARCHAR(20) NULL DEFAULT NULL"},
+            {"pedido", "dataPedido", "ALTER TABLE pedido MODIFY COLUMN dataPedido DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP()"},
+            {"financeiro", "CodPedido", "ALTER TABLE financeiro MODIFY COLUMN CodPedido INT NULL DEFAULT NULL"},
+            {"financeiro", "dataMovimentacao", "ALTER TABLE financeiro MODIFY COLUMN dataMovimentacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP()"}
+        };
+        stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 0");
+        try {
+            for (String[] ajuste : ajustesColunas) {
+                Set<String> cols = colunasExistentes.get(ajuste[0].toLowerCase(Locale.ROOT));
+                if (cols != null && cols.contains(ajuste[1].toLowerCase(Locale.ROOT))) {
+                    try {
+                        stmt.executeUpdate(ajuste[2]);
+                    } catch (SQLException erro) {
+                        if ("financeiro".equalsIgnoreCase(ajuste[0]) && "CodPedido".equalsIgnoreCase(ajuste[1])) {
+                            permitirCodPedidoNuloNoFinanceiro(stmt);
+                        }
+                    }
+                }
+            }
+        } finally {
+            stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 1");
+        }
+    }
+
+    private static void permitirCodPedidoNuloNoFinanceiro(Statement stmt) {
+        List<String> fks = new ArrayList<>();
+        try (ResultSet rs = stmt.executeQuery(
+                "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
+                + "WHERE TABLE_SCHEMA = 'papelogistic' AND TABLE_NAME = 'financeiro' "
+                + "AND COLUMN_NAME = 'CodPedido' AND REFERENCED_TABLE_NAME IS NOT NULL")) {
+            while (rs.next()) {
+                fks.add(rs.getString("CONSTRAINT_NAME"));
+            }
+        } catch (SQLException ignorado) {
+            return;
+        }
+        try {
+            for (String fk : fks) {
+                stmt.executeUpdate("ALTER TABLE financeiro DROP FOREIGN KEY `" + fk + "`");
+            }
+            stmt.executeUpdate("ALTER TABLE financeiro MODIFY COLUMN CodPedido INT NULL DEFAULT NULL");
+            stmt.executeUpdate("ALTER TABLE financeiro ADD CONSTRAINT FK_Financeiro_Pedido "
+                + "FOREIGN KEY (CodPedido) REFERENCES pedido (CodPedido) ON DELETE SET NULL ON UPDATE CASCADE");
+        } catch (SQLException ignorado) {
+            // Mantém execução caso o banco não permita recriar a constraint.
+        }
+    }
+
+    public static int proximoCodigo(Connection conn, String tabela, String coluna) throws SQLException {
+        String sql = "SELECT COALESCE(MAX(" + coluna + "), 0) + 1 FROM " + tabela;
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : 1;
+        }
     }
 
     public static void main(String[] args) {

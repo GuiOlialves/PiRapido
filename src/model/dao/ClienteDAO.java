@@ -13,12 +13,16 @@ import model.entidades.Cliente;
 public class ClienteDAO {
 
     public void inserir(Cliente cliente) {
-        String sql = "INSERT INTO cliente (CodCliente, IdPessoa, nomeCliente, emailCliente, telefoneCliente, cep) VALUES (NULLIF(?, 0), ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO cliente (CodCliente, IdPessoa, nomeCliente, emailCliente, telefoneCliente, cep) VALUES (?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = Conexao.conectar();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setInt(1, cliente.getCliente());
+            int codigo = cliente.getCliente();
+            if (codigo <= 0) {
+                codigo = Conexao.proximoCodigo(conn, "cliente", "CodCliente");
+            }
+            stmt.setInt(1, codigo);
             stmt.setString(2, cliente.getIdPessoa());
             stmt.setString(3, cliente.getNomeCliente());
             stmt.setString(4, cliente.getEmailCliente());
@@ -26,6 +30,7 @@ public class ClienteDAO {
             stmt.setString(6, cliente.getCep());
 
             if (stmt.executeUpdate() == 0) { throw new SQLException("Nenhum registro afetado. Confira os identificadores informados."); }
+            cliente.setCliente(codigo);
             System.out.println("Cliente cadastrado com sucesso!");
 
         } catch (SQLException e) {

@@ -44,25 +44,22 @@ public class ProdutoDAO {
     }
 
     private int inserirProduto(Connection conn, Produto produto) throws SQLException {
-        String sql = "INSERT INTO produto (CodProduto, nomeProduto, tipo, valor) VALUES (NULLIF(?, 0), ?, ?, ?)";
+        int codigo = produto.getCodProduto();
+        if (codigo <= 0) {
+            codigo = Conexao.proximoCodigo(conn, "produto", "CodProduto");
+        }
+        String sql = "INSERT INTO produto (CodProduto, nomeProduto, tipo, valor) VALUES (?, ?, ?, ?)";
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setInt(1, produto.getCodProduto());
+            stmt.setInt(1, codigo);
             stmt.setString(2, produto.getNomeProduto());
             stmt.setString(3, produto.getTipo());
             stmt.setDouble(4, produto.getValor());
 
             if (stmt.executeUpdate() == 0) { throw new SQLException("Nenhum registro afetado. Confira os identificadores informados."); }
-            if (produto.getCodProduto() != 0) {
-                return produto.getCodProduto();
-            }
-            try (ResultSet chaves = stmt.getGeneratedKeys()) {
-                if (chaves.next()) {
-                    return chaves.getInt(1);
-                }
-                throw new SQLException("O banco não retornou o código do produto.");
-            }
+            produto.setCodProduto(codigo);
+            return codigo;
         }
     }
 

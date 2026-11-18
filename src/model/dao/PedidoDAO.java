@@ -15,22 +15,20 @@ import model.entidades.Pedido;
 public class PedidoDAO {
 
     public void inserir(Pedido pedido) {
-        String sql = "INSERT INTO pedido (CodPedido, CodCliente) VALUES (NULLIF(?, 0), ?)";
+        String sql = "INSERT INTO pedido (CodPedido, CodCliente) VALUES (?, ?)";
 
         try (Connection conn = Conexao.conectar();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setInt(1, pedido.getCodPedido());
+            int codigo = pedido.getCodPedido();
+            if (codigo <= 0) {
+                codigo = Conexao.proximoCodigo(conn, "pedido", "CodPedido");
+            }
+            stmt.setInt(1, codigo);
             stmt.setInt(2, pedido.getCodCliente());
 
             if (stmt.executeUpdate() == 0) { throw new SQLException("Nenhum registro afetado. Confira os identificadores informados."); }
-            if (pedido.getCodPedido() == 0) {
-                try (ResultSet chaves = stmt.getGeneratedKeys()) {
-                    if (chaves.next()) {
-                        pedido.setCodPedido(chaves.getInt(1));
-                    }
-                }
-            }
+            pedido.setCodPedido(codigo);
 
         } catch (SQLException e) {
             throw new IllegalStateException("Erro ao inserir pedido: " + e.getMessage(), e);
