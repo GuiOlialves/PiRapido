@@ -180,14 +180,42 @@ public class Conexao {
 
         try (Connection conn = conexaoServidor;
              Statement stmt = conn.createStatement()) {
-            for (String sql : SQL_ESTRUTURA) {
-                stmt.executeUpdate(sql);
+            try {
+                criarEstrutura(stmt);
+            } catch (SQLException erro) {
+                if (!tablespaceOrfao(erro)) {
+                    throw erro;
+                }
+                // Arquivos .ibd orfaos (pasta de dados copiada de outro PC): recria o banco do zero.
+                stmt.executeUpdate("SET FOREIGN_KEY_CHECKS=0");
+                stmt.executeUpdate("DROP DATABASE IF EXISTS papelogistic");
+                stmt.executeUpdate("SET FOREIGN_KEY_CHECKS=1");
+                criarEstrutura(stmt);
             }
-            atualizarEstrutura(stmt);
             portaAtiva = portaEncontrada;
             senhaAtiva = senhaEncontrada;
             bancoInicializado = true;
         }
+    }
+
+    private static void criarEstrutura(Statement stmt) throws SQLException {
+        for (String sql : SQL_ESTRUTURA) {
+            stmt.executeUpdate(sql);
+        }
+        atualizarEstrutura(stmt);
+    }
+
+    private static boolean tablespaceOrfao(SQLException erro) {
+        for (Throwable t = erro; t != null; t = t.getCause()) {
+            if (t instanceof SQLException && ((SQLException) t).getErrorCode() == 1813) {
+                return true;
+            }
+            String m = t.getMessage();
+            if (m != null && m.contains("DISCARD the tablespace")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void atualizarEstrutura(Statement stmt) throws SQLException {
