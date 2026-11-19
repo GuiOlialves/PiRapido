@@ -75,14 +75,32 @@ public class PedidoDAO {
     }
 
     public void deletar(int codPedido) {
-        String sql = "DELETE FROM pedido WHERE CodPedido = ?";
+        String sqlFinanceiro = "UPDATE financeiro SET CodPedido = NULL WHERE CodPedido = ?";
+        String sqlItens = "DELETE FROM item_pedido WHERE CodPedido = ?";
+        String sqlPedido = "DELETE FROM pedido WHERE CodPedido = ?";
 
-        try (Connection conn = Conexao.conectar();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, codPedido);
-            if (stmt.executeUpdate() == 0) { throw new SQLException("Nenhum registro afetado. Confira os identificadores informados."); }
-
+        try (Connection conn = Conexao.conectar()) {
+            conn.setAutoCommit(false);
+            try {
+                try (PreparedStatement stmtFin = conn.prepareStatement(sqlFinanceiro)) {
+                    stmtFin.setInt(1, codPedido);
+                    stmtFin.executeUpdate();
+                }
+                try (PreparedStatement stmtItens = conn.prepareStatement(sqlItens)) {
+                    stmtItens.setInt(1, codPedido);
+                    stmtItens.executeUpdate();
+                }
+                try (PreparedStatement stmtPedido = conn.prepareStatement(sqlPedido)) {
+                    stmtPedido.setInt(1, codPedido);
+                    if (stmtPedido.executeUpdate() == 0) {
+                        throw new SQLException("Nenhum registro afetado. Confira os identificadores informados.");
+                    }
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
             throw new IllegalStateException("Erro ao excluir pedido: " + e.getMessage(), e);
         }

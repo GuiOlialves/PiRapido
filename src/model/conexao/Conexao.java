@@ -16,14 +16,22 @@ import java.util.Set;
 
 public class Conexao {
 
-    private static final String URL_SERVIDOR = "jdbc:mysql://localhost:3306/";
-    private static final String URL = "jdbc:mysql://localhost:3306/papelogistic";
+    private static final int[] PORTAS_TENTATIVA = {3306, 3307};
     private static final String USUARIO = "root";
     private static final String SENHA = "";
-    private static final String[] SENHAS_TENTATIVA = {SENHA, "root", "1234", "admin"};
+    private static final String[] SENHAS_TENTATIVA = {SENHA, "root", "1234", "admin", "123456", "mysql"};
 
+    private static int portaAtiva = 3306;
     private static String senhaAtiva = SENHA;
     private static boolean bancoInicializado = false;
+
+    private static String urlServidor(int porta) {
+        return "jdbc:mysql://localhost:" + porta + "/";
+    }
+
+    private static String urlBanco(int porta) {
+        return "jdbc:mysql://localhost:" + porta + "/papelogistic";
+    }
 
     private static final String[] SQL_ESTRUTURA = {
         "CREATE DATABASE IF NOT EXISTS papelogistic DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci",
@@ -132,7 +140,7 @@ public class Conexao {
         if (!bancoInicializado) {
             inicializarBanco();
         }
-        return DriverManager.getConnection(URL, USUARIO, senhaAtiva);
+        return DriverManager.getConnection(urlBanco(portaAtiva), USUARIO, senhaAtiva);
     }
 
     private static synchronized void inicializarBanco() throws SQLException {
@@ -140,21 +148,25 @@ public class Conexao {
             return;
         }
         SQLException ultimoErro = null;
-        for (String tentativa : SENHAS_TENTATIVA) {
-            try (Connection conexaoServidor = DriverManager.getConnection(URL_SERVIDOR, USUARIO, tentativa);
-                 Statement stmt = conexaoServidor.createStatement()) {
-                for (String sql : SQL_ESTRUTURA) {
-                    stmt.executeUpdate(sql);
-                }
-                atualizarEstrutura(stmt);
-                senhaAtiva = tentativa;
-                bancoInicializado = true;
-                return;
-            } catch (SQLException erro) {
-                ultimoErro = erro;
-                // Código 1045 = Access denied (tenta a próxima senha padrão).
-                if (erro.getErrorCode() != 1045) {
-                    break;
+        for (int porta : PORTAS_TENTATIVA) {
+            for (String tentativa : SENHAS_TENTATIVA) {
+                try (Connection conexaoServidor = DriverManager.getConnection(urlServidor(porta), USUARIO, tentativa);
+                     Statement stmt = conexaoServidor.createStatement()) {
+                    for (String sql : SQL_ESTRUTURA) {
+                        stmt.executeUpdate(sql);
+                    }
+                    atualizarEstrutura(stmt);
+                    portaAtiva = porta;
+                    senhaAtiva = tentativa;
+                    bancoInicializado = true;
+                    return;
+                } catch (SQLException erro) {
+                    ultimoErro = erro;
+                    // Código 1045 = Access denied (tenta a próxima senha na mesma porta).
+                    // Outros códigos (ex: porta fechada) avançam para a próxima porta (3307).
+                    if (erro.getErrorCode() != 1045) {
+                        break;
+                    }
                 }
             }
         }
@@ -256,6 +268,13 @@ public class Conexao {
             }
         } finally {
             stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 1");
+        }
+        try {
+            stmt.executeUpdate("INSERT IGNORE INTO usuario (login_simples, senha, nome, telefoneUsuario, emailUsuario) "
+                + "VALUES ('biel', '1234', 'Administrador', NULL, 'biel@papelogistic.com'), "
+                + "('admin', 'admin', 'Administrador', NULL, 'admin@papelogistic.com')");
+        } catch (SQLException ignorado) {
+            // Ignora caso os usuários padrão já existam.
         }
     }
 

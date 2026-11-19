@@ -5,9 +5,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
+import javax.swing.JButton;
 import javax.swing.JOptionPane;
 import javax.swing.JTable;
+import javax.swing.RowFilter;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableModel;
+import javax.swing.table.TableRowSorter;
+import javax.swing.text.JTextComponent;
 import model.dao.ClienteDAO;
 import model.dao.EstoqueDAO;
 import model.dao.FinanceiroDAO;
@@ -48,6 +54,21 @@ final class TabelasCadastro {
         };
     }
 
+    static void configurarBusca(JTable tabela, JButton botaoBuscar, JTextComponent... camposBusca) {
+        TableRowSorter<TableModel> sorter = new TableRowSorter<>(tabela.getModel());
+        tabela.setRowSorter(sorter);
+        botaoBuscar.addActionListener(evt -> {
+            List<RowFilter<Object, Object>> filtros = new ArrayList<>();
+            for (JTextComponent campo : camposBusca) {
+                String termo = campo.getText().trim();
+                if (!termo.isEmpty()) {
+                    filtros.add(RowFilter.regexFilter("(?i)" + Pattern.quote(termo)));
+                }
+            }
+            sorter.setRowFilter(filtros.isEmpty() ? null : RowFilter.andFilter(filtros));
+        });
+    }
+
     static List<Object[]> produtos() {
         Map<Integer, Integer> quantidades = new HashMap<>();
         for (Estoque estoque : new EstoqueDAO().listar()) {
@@ -56,11 +77,9 @@ final class TabelasCadastro {
         List<Object[]> linhas = new ArrayList<>();
         for (Produto produto : new ProdutoDAO().listar()) {
             int codigo = produto.getCodProduto();
-            Integer quantidade = quantidades.get(codigo);
-            if (quantidade != null) {
-                linhas.add(new Object[]{codigo, produto.getNomeProduto(), produto.getTipo(),
-                    quantidade, produto.getValor()});
-            }
+            int quantidade = quantidades.getOrDefault(codigo, 0);
+            linhas.add(new Object[]{codigo, produto.getNomeProduto(), produto.getTipo(),
+                quantidade, produto.getValor()});
         }
         return linhas;
     }
