@@ -25,12 +25,14 @@ public class Conexao {
     private static String senhaAtiva = SENHA;
     private static boolean bancoInicializado = false;
 
+    private static final String PARAMETROS_JDBC = "?useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=3000";
+
     private static String urlServidor(int porta) {
-        return "jdbc:mysql://localhost:" + porta + "/";
+        return "jdbc:mysql://localhost:" + porta + "/" + PARAMETROS_JDBC;
     }
 
     private static String urlBanco(int porta) {
-        return "jdbc:mysql://localhost:" + porta + "/papelogistic";
+        return "jdbc:mysql://localhost:" + porta + "/papelogistic" + PARAMETROS_JDBC;
     }
 
     private static final String[] SQL_ESTRUTURA = {
@@ -104,13 +106,13 @@ public class Conexao {
     };
 
     private static final String[][] COLUNAS_OBRIGATORIAS = {
-        {"cliente", "CodCliente", "INT NOT NULL AUTO_INCREMENT"},
+        {"cliente", "CodCliente", "INT NOT NULL"},
         {"cliente", "IdPessoa", "VARCHAR(100) NOT NULL DEFAULT ''"},
         {"cliente", "nomeCliente", "VARCHAR(150) NOT NULL DEFAULT ''"},
         {"cliente", "emailCliente", "VARCHAR(150) DEFAULT NULL"},
         {"cliente", "telefoneCliente", "VARCHAR(20) DEFAULT NULL"},
         {"cliente", "cep", "CHAR(8) DEFAULT NULL"},
-        {"produto", "CodProduto", "INT NOT NULL AUTO_INCREMENT"},
+        {"produto", "CodProduto", "INT NOT NULL"},
         {"produto", "nomeProduto", "VARCHAR(150) NOT NULL DEFAULT '' AFTER CodProduto"},
         {"produto", "tipo", "VARCHAR(100) NOT NULL DEFAULT ''"},
         {"produto", "valor", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"},
@@ -121,14 +123,14 @@ public class Conexao {
         {"usuario", "emailUsuario", "VARCHAR(150) NOT NULL DEFAULT ''"},
         {"estoque", "CodProduto", "INT NOT NULL"},
         {"estoque", "quantidade", "INT NOT NULL DEFAULT 0"},
-        {"pedido", "CodPedido", "INT NOT NULL AUTO_INCREMENT"},
+        {"pedido", "CodPedido", "INT NOT NULL"},
         {"pedido", "CodCliente", "INT NOT NULL"},
         {"pedido", "dataPedido", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP()"},
         {"item_pedido", "CodPedido", "INT NOT NULL"},
         {"item_pedido", "CodProduto", "INT NOT NULL"},
         {"item_pedido", "quantidade", "INT NOT NULL DEFAULT 0"},
         {"item_pedido", "ValorUnitario", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"},
-        {"financeiro", "CodFinanceiro", "INT NOT NULL AUTO_INCREMENT"},
+        {"financeiro", "CodFinanceiro", "INT NOT NULL"},
         {"financeiro", "Caixa", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"},
         {"financeiro", "ValorEntrada", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"},
         {"financeiro", "ValorSaida", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"},
@@ -148,29 +150,44 @@ public class Conexao {
             return;
         }
         SQLException ultimoErro = null;
+        SQLException erroAcessoNegado = null;
+        Connection conexaoServidor = null;
+        int portaEncontrada = 3306;
+        String senhaEncontrada = SENHA;
+
+        busca:
         for (int porta : PORTAS_TENTATIVA) {
             for (String tentativa : SENHAS_TENTATIVA) {
-                try (Connection conexaoServidor = DriverManager.getConnection(urlServidor(porta), USUARIO, tentativa);
-                     Statement stmt = conexaoServidor.createStatement()) {
-                    for (String sql : SQL_ESTRUTURA) {
-                        stmt.executeUpdate(sql);
-                    }
-                    atualizarEstrutura(stmt);
-                    portaAtiva = porta;
-                    senhaAtiva = tentativa;
-                    bancoInicializado = true;
-                    return;
+                try {
+                    conexaoServidor = DriverManager.getConnection(urlServidor(porta), USUARIO, tentativa);
+                    portaEncontrada = porta;
+                    senhaEncontrada = tentativa;
+                    break busca;
                 } catch (SQLException erro) {
                     ultimoErro = erro;
-                    // Código 1045 = Access denied (tenta a próxima senha na mesma porta).
-                    // Outros códigos (ex: porta fechada) avançam para a próxima porta (3307).
-                    if (erro.getErrorCode() != 1045) {
+                    if (erro.getErrorCode() == 1045) {
+                        erroAcessoNegado = erro;
+                    } else {
                         break;
                     }
                 }
             }
         }
-        throw ultimoErro;
+
+        if (conexaoServidor == null) {
+            throw erroAcessoNegado != null ? erroAcessoNegado : ultimoErro;
+        }
+
+        try (Connection conn = conexaoServidor;
+             Statement stmt = conn.createStatement()) {
+            for (String sql : SQL_ESTRUTURA) {
+                stmt.executeUpdate(sql);
+            }
+            atualizarEstrutura(stmt);
+            portaAtiva = portaEncontrada;
+            senhaAtiva = senhaEncontrada;
+            bancoInicializado = true;
+        }
     }
 
     private static void atualizarEstrutura(Statement stmt) throws SQLException {
@@ -240,7 +257,11 @@ public class Conexao {
             }
         }
         for (String sql : alteracoesLegadas) {
-            stmt.executeUpdate(sql);
+            try {
+                stmt.executeUpdate(sql);
+            } catch (SQLException ignorado) {
+                // Ignora coluna legada com restrição específica.
+            }
         }
 
         String[][] ajustesColunas = {

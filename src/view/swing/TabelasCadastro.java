@@ -1,14 +1,17 @@
 package view.swing;
 
+import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JOptionPane;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
 import javax.swing.RowFilter;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
@@ -57,7 +60,7 @@ final class TabelasCadastro {
     static void configurarBusca(JTable tabela, JButton botaoBuscar, JTextComponent... camposBusca) {
         TableRowSorter<TableModel> sorter = new TableRowSorter<>(tabela.getModel());
         tabela.setRowSorter(sorter);
-        botaoBuscar.addActionListener(evt -> {
+        Runnable filtrar = () -> {
             List<RowFilter<Object, Object>> filtros = new ArrayList<>();
             for (JTextComponent campo : camposBusca) {
                 String termo = campo.getText().trim();
@@ -66,7 +69,17 @@ final class TabelasCadastro {
                 }
             }
             sorter.setRowFilter(filtros.isEmpty() ? null : RowFilter.andFilter(filtros));
-        });
+        };
+        botaoBuscar.addActionListener(evt -> filtrar.run());
+        for (JTextComponent campo : camposBusca) {
+            campo.getInputMap().put(KeyStroke.getKeyStroke("ENTER"), "buscarTabela");
+            campo.getActionMap().put("buscarTabela", new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    filtrar.run();
+                }
+            });
+        }
     }
 
     static List<Object[]> produtos() {

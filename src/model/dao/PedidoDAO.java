@@ -10,6 +10,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import model.conexao.Conexao;
+import model.entidades.ItemPedido;
 import model.entidades.Pedido;
 
 public class PedidoDAO {
@@ -32,6 +33,47 @@ public class PedidoDAO {
 
         } catch (SQLException e) {
             throw new IllegalStateException("Erro ao inserir pedido: " + e.getMessage(), e);
+        }
+    }
+
+    public void inserirComItem(Pedido pedido, ItemPedido item) {
+        String sqlPedido = "INSERT INTO pedido (CodPedido, CodCliente) VALUES (?, ?)";
+        String sqlItem = "INSERT INTO item_pedido (CodPedido, CodProduto, quantidade, ValorUnitario) VALUES (?, ?, ?, ?)";
+
+        try (Connection conn = Conexao.conectar()) {
+            conn.setAutoCommit(false);
+            try {
+                int codigo = pedido.getCodPedido();
+                if (codigo <= 0) {
+                    codigo = Conexao.proximoCodigo(conn, "pedido", "CodPedido");
+                }
+                try (PreparedStatement stmtPedido = conn.prepareStatement(sqlPedido)) {
+                    stmtPedido.setInt(1, codigo);
+                    stmtPedido.setInt(2, pedido.getCodCliente());
+                    if (stmtPedido.executeUpdate() == 0) {
+                        throw new SQLException("Nenhum registro afetado. Confira os identificadores informados.");
+                    }
+                }
+                if (item != null) {
+                    try (PreparedStatement stmtItem = conn.prepareStatement(sqlItem)) {
+                        stmtItem.setInt(1, codigo);
+                        stmtItem.setInt(2, item.getCodProduto());
+                        stmtItem.setInt(3, item.getQuantidade());
+                        stmtItem.setDouble(4, item.getValorUnitario());
+                        if (stmtItem.executeUpdate() == 0) {
+                            throw new SQLException("Nenhum registro afetado ao inserir o item do pedido.");
+                        }
+                    }
+                    item.setCodPedido(codigo);
+                }
+                conn.commit();
+                pedido.setCodPedido(codigo);
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Erro ao cadastrar pedido: " + e.getMessage(), e);
         }
     }
 

@@ -121,11 +121,7 @@ final class Cadastros {
                     }
                 }
             } else {
-                dao.inserir(pedido);
-                if (item != null) {
-                    item.setCodPedido(pedido.getCodPedido());
-                    itemDao.inserir(item);
-                }
+                dao.inserirComItem(pedido, item);
             }
         }, "Código do cliente", "Código do produto (opcional)", "Quantidade (opcional)", "Valor unitário (opcional)");
     }
@@ -166,7 +162,7 @@ final class Cadastros {
             } else {
                 dao.inserir(registro);
             }
-        }, "Entrada", "Saída", "Caixa", "Código do pedido (opcional)");
+        }, "Entrada", "Saída", "Caixa (opcional)", "Código do pedido (opcional)");
     }
 
     static void despesa(Component tela, Runnable atualizarTabela) {
